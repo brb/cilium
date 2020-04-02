@@ -970,11 +970,13 @@ struct lb4_affinity_val *lb4_lookup_affinity(struct lb4_key *svc_key, __u32 svc_
 	val = map_lookup_elem(&LB4_AFFINITY_MAP, &key);
 
 	if (val != NULL) {
-		if ((val->last_used + svc_affinity_timeout) > now) {
+		if ((val->last_used + svc_affinity_timeout) < now) {
 			// TODO(brb) delete element
 			return NULL;
 		}
 
+		// TODO(brb) can't remove this statement, as otherwise
+		// compilation fails
 		val->last_used = now;
 		if (map_update_elem(&LB4_AFFINITY_MAP, &key, val, 0) < 0)
 			return NULL;
@@ -986,7 +988,6 @@ struct lb4_affinity_val *lb4_lookup_affinity(struct lb4_key *svc_key, __u32 svc_
 	return NULL;
 }
 
-/*
 static __always_inline
 void lb4_update_affinity(struct lb4_key *svc_key,
 			 bool netns_cookie, __u64 client_id, __u32 backend_id)
@@ -1000,7 +1001,6 @@ void lb4_update_affinity(struct lb4_key *svc_key,
 					.backend_id = backend_id };
 	map_update_elem(&LB4_AFFINITY_MAP, &key, &val, 0);
 }
-*/
 
 #endif /* ENABLE_IPV4 */
 

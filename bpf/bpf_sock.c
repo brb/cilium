@@ -274,12 +274,12 @@ static __always_inline int __sock4_xlate(struct bpf_sock_addr *ctx,
 	if (sock4_skip_xlate(svc, in_hostns, ctx->user_ip4))
 		return -EPERM;
 
-	//__u64 client_id = 666; // TODO(brb)
+	__u64 client_id = 666;
 
 	if (svc->affinity) {
 		key.dport = ctx_dst_port(ctx);
 		//struct lb4_affinity_val *val = lb4_lookup_affinity(&key, svc->affinity_timeout, true, get_netns_cookie(ctx));
-		struct lb4_affinity_val *val = lb4_lookup_affinity(&key, svc->affinity_timeout, true, 666);
+		struct lb4_affinity_val *val = lb4_lookup_affinity(&key, svc->affinity_timeout, true, client_id);
 		if (val != NULL) {
 			backend_id = val->backend_id;
 		}
@@ -295,9 +295,10 @@ static __always_inline int __sock4_xlate(struct bpf_sock_addr *ctx,
 			return -ENOENT;
 		}
 		backend_id = slave_svc->backend_id;
-		if (svc->affinity) {
-			//lb4_update_affinity(&key, true, client_id, backend_id);
-		}
+	}
+
+	if (svc->affinity) {
+		lb4_update_affinity(&key, true, client_id, backend_id);
 	}
 
 	backend = __lb4_lookup_backend(backend_id);
