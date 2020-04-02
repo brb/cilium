@@ -72,6 +72,8 @@ int main() {
     DECLARE(struct, ipv4_frag_id, iter);
     DECLARE(struct, ipv4_frag_l4ports, iter);
     DECLARE(union, macaddr, iter);
+    DECLARE(struct, lb4_affinity_key, iter);
+    DECLARE(struct, lb4_affinity_val, iter);
 
     return 0;
 }

@@ -658,8 +658,9 @@ struct lb4_affinity_key {
 };
 
 struct lb4_affinity_val {
-	__u32 backend_id;
 	__u64 last_used;
+	__u32 backend_id;
+	__u32 pad;
 };
 
 struct ct_state {
