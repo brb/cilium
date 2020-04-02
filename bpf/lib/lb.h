@@ -958,8 +958,9 @@ drop_no_service:
 
 // TODO(brb) => get_backend_id_from_affinity
 static __always_inline
-struct lb4_affinity_val *lb4_lookup_affinity(struct lb4_key *svc_key, __u32 svc_affinity_timeout,
-		    bool netns_cookie, __u64 client_id)
+int lb4_affinity_get_backend_id(struct lb4_key *svc_key,
+				__u32 svc_affinity_timeout,
+				bool netns_cookie, __u64 client_id)
 {
 	__u32 now = bpf_ktime_get_sec();
 	struct lb4_affinity_key key = {	.address = svc_key->address,
@@ -971,21 +972,21 @@ struct lb4_affinity_val *lb4_lookup_affinity(struct lb4_key *svc_key, __u32 svc_
 
 	if (val != NULL) {
 		if ((val->last_used + svc_affinity_timeout) < now) {
-			// TODO(brb) delete element
-			return NULL;
+			map_delete_elem(&LB4_AFFINITY_MAP, &key);
+			return 0;
 		}
 
 		// TODO(brb) can't remove this statement, as otherwise
 		// compilation fails
 		val->last_used = now;
 		if (map_update_elem(&LB4_AFFINITY_MAP, &key, val, 0) < 0)
-			return NULL;
+			return 0;
 
-		return val;
+		return val->backend_id;
 	}
 
 
-	return NULL;
+	return 0;
 }
 
 static __always_inline
