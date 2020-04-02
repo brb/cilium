@@ -49,7 +49,8 @@ type LBBPFMap struct{}
 func (*LBBPFMap) UpsertService(
 	svcID uint16, svcIP net.IP, svcPort uint16,
 	backendIDs []uint16, prevBackendCount int,
-	ipv6 bool, svcType loadbalancer.SVCType, svcLocal bool) error {
+	ipv6 bool, svcType loadbalancer.SVCType, svcLocal bool,
+	sessionAffinity bool, sessionAffinityTimeoutSec uint32) error {
 
 	var svcKey ServiceKey
 
@@ -87,7 +88,9 @@ func (*LBBPFMap) UpsertService(
 		return fmt.Errorf("Unable to update reverse NAT %+v => %+v: %s", revNATKey, revNATValue, err)
 	}
 
-	if err := updateMasterService(svcKey, len(backendIDs), int(svcID), svcType, svcLocal); err != nil {
+	if err := updateMasterService(svcKey, len(backendIDs), int(svcID), svcType, svcLocal,
+		sessionAffinity, sessionAffinityTimeoutSec); err != nil {
+
 		deleteRevNatLocked(revNATKey)
 		return fmt.Errorf("Unable to update service %+v: %s", svcKey, err)
 	}
@@ -322,12 +325,17 @@ func (*LBBPFMap) DumpBackendMaps() ([]*loadbalancer.Backend, error) {
 	return lbBackends, nil
 }
 
-func updateMasterService(fe ServiceKey, nbackends int, revNATID int, svcType loadbalancer.SVCType, svcLocal bool) error {
+func updateMasterService(fe ServiceKey, nbackends int, revNATID int, svcType loadbalancer.SVCType,
+	svcLocal bool, sessionAffinity bool, sessionAffinityTimeoutSec uint32) error {
+
 	fe.SetSlave(0)
 	zeroValue := fe.NewValue().(ServiceValue)
 	zeroValue.SetCount(nbackends)
 	zeroValue.SetRevNat(revNATID)
-	zeroValue.SetFlags(loadbalancer.CreateSvcFlag(svcLocal, svcType).UInt8())
+	zeroValue.SetFlags(loadbalancer.CreateSvcFlag(svcLocal, sessionAffinity, svcType).UInt8())
+	if sessionAffinity {
+		zeroValue.SetSessionAffinityTimeoutSec(sessionAffinityTimeoutSec)
+	}
 
 	return updateServiceEndpoint(fe, zeroValue)
 }

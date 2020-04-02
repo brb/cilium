@@ -245,6 +245,7 @@ static __always_inline int __sock4_xlate(struct bpf_sock_addr *ctx,
 		.dport		= ctx_dst_port(ctx),
 	};
 	struct lb4_service *slave_svc;
+	__u32 backend_id = 0; // TODO(brb) double check that backend ID cannot be 0!!!
 
 	if (!udp_only && !sock_proto_enabled(ctx->protocol))
 		return -ENOTSUP;
@@ -273,15 +274,31 @@ static __always_inline int __sock4_xlate(struct bpf_sock_addr *ctx,
 	if (sock4_skip_xlate(svc, in_hostns, ctx->user_ip4))
 		return -EPERM;
 
-	key.slave = (sock_local_cookie(ctx_full) % svc->count) + 1;
-
-	slave_svc = __lb4_lookup_slave(&key);
-	if (!slave_svc) {
-		update_metrics(0, METRIC_EGRESS, REASON_LB_NO_SLAVE);
-		return -ENOENT;
+	if (svc->affinity) {
+		key.dport = ctx_dst_port(ctx);
+		struct lb4_affinity_val *val = lb4_lookup_affinity(&key, svc->affinity_timeout, true, get_netns_cookie(ctx));
+		if (val != NULL) {
+			backend_id = val->backend_id;
+		}
 	}
 
-	backend = __lb4_lookup_backend(slave_svc->backend_id);
+		// 2. if found, check whether address,key,backend_id still present
+		// IF any is no entry goto select slave
+
+	if (backend_id == 0) {
+		key.slave = (sock_local_cookie(ctx_full) % svc->count) + 1;
+		slave_svc = __lb4_lookup_slave(&key);
+		if (!slave_svc) {
+			update_metrics(0, METRIC_EGRESS, REASON_LB_NO_SLAVE);
+			return -ENOENT;
+		}
+		backend_id = slave_svc->backend_id;
+		if (svc->affinity) {
+			// TODO(brb) update affinity
+		}
+	}
+
+	backend = __lb4_lookup_backend(backend_id);
 	if (!backend) {
 		update_metrics(0, METRIC_EGRESS, REASON_LB_NO_BACKEND);
 		return -ENOENT;
