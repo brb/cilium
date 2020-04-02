@@ -278,11 +278,10 @@ static __always_inline int __sock4_xlate(struct bpf_sock_addr *ctx,
 
 	if (svc->affinity) {
 		key.dport = ctx_dst_port(ctx);
-		//struct lb4_affinity_val *val = lb4_lookup_affinity(&key, svc->affinity_timeout, true, get_netns_cookie(ctx));
-		backend_id = lb4_affinity_get_backend_id(&key, svc->affinity_timeout, true, client_id);
-	}
-
+		// TODO(brb) get_netns_cookie
 		// 2. if found, check whether address,key,backend_id still present
+		backend_id = lb4_affinity_backend_id(&key, svc->affinity_timeout, true, client_id);
+	}
 
 	if (backend_id == 0) {
 		key.slave = (sock_local_cookie(ctx_full) % svc->count) + 1;
