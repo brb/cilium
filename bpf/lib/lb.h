@@ -956,18 +956,19 @@ drop_no_service:
 		return DROP_NO_SERVICE;
 }
 
+// TODO(brb) => get_backend_id_from_affinity
 static __always_inline
 struct lb4_affinity_val *lb4_lookup_affinity(struct lb4_key *svc_key, __u32 svc_affinity_timeout,
 		    bool netns_cookie, __u64 client_id)
 {
 	__u32 now = bpf_ktime_get_sec();
 	struct lb4_affinity_key key = {	.address = svc_key->address,
-						.dport = svc_key->dport,
-						.netns_cookie = netns_cookie,
-						.client_id = client_id };
+					.dport = svc_key->dport,
+					.netns_cookie = netns_cookie,
+					.client_id = client_id };
 	struct lb4_affinity_val *val;
-
 	val = map_lookup_elem(&LB4_AFFINITY_MAP, &key);
+
 	if (val != NULL) {
 		if ((val->last_used + svc_affinity_timeout) > now) {
 			// TODO(brb) delete element
@@ -975,14 +976,31 @@ struct lb4_affinity_val *lb4_lookup_affinity(struct lb4_key *svc_key, __u32 svc_
 		}
 
 		val->last_used = now;
-		if (map_update_elem(&LB4_AFFINITY_MAP, &key, &val, 0) < 0)
+		if (map_update_elem(&LB4_AFFINITY_MAP, &key, val, 0) < 0)
 			return NULL;
 
 		return val;
 	}
 
+
 	return NULL;
 }
+
+/*
+static __always_inline
+void lb4_update_affinity(struct lb4_key *svc_key,
+			 bool netns_cookie, __u64 client_id, __u32 backend_id)
+{
+	__u32 now = bpf_ktime_get_sec();
+	struct lb4_affinity_key key = {	.address = svc_key->address,
+					.dport = svc_key->dport,
+					.netns_cookie = netns_cookie,
+					.client_id = client_id };
+	struct lb4_affinity_val val = { .last_used = now,
+					.backend_id = backend_id };
+	map_update_elem(&LB4_AFFINITY_MAP, &key, &val, 0);
+}
+*/
 
 #endif /* ENABLE_IPV4 */
 
