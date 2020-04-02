@@ -279,10 +279,7 @@ static __always_inline int __sock4_xlate(struct bpf_sock_addr *ctx,
 	if (svc->affinity) {
 		key.dport = ctx_dst_port(ctx);
 		//struct lb4_affinity_val *val = lb4_lookup_affinity(&key, svc->affinity_timeout, true, get_netns_cookie(ctx));
-		struct lb4_affinity_val *val = lb4_lookup_affinity(&key, svc->affinity_timeout, true, client_id);
-		if (val != NULL) {
-			backend_id = val->backend_id;
-		}
+		backend_id = lb4_affinity_get_backend_id(&key, svc->affinity_timeout, true, client_id);
 	}
 
 		// 2. if found, check whether address,key,backend_id still present
