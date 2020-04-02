@@ -133,6 +133,9 @@ func (s ServiceFlags) String() string {
 	if s&serviceFlagLocalScope != 0 {
 		strTypes = append(strTypes, string(SVCTrafficPolicyLocal))
 	}
+	if s&serviceFlagSessionAffinity != 0 {
+		strTypes = append(strTypes, "sessionAffinity")
+	}
 	return strings.Join(strTypes, ", ")
 }
 
