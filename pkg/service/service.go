@@ -40,7 +40,7 @@ var (
 
 // LBMap is the interface describing methods for manipulating service maps.
 type LBMap interface {
-	UpsertService(uint16, net.IP, uint16, []uint16, int, bool, lb.SVCType, bool) error
+	UpsertService(uint16, net.IP, uint16, []uint16, int, bool, lb.SVCType, bool, bool, uint32) error
 	DeleteService(lb.L3n4AddrID, int) error
 	AddBackend(uint16, net.IP, uint16, bool) error
 	DeleteBackendByID(uint16, bool) error
@@ -65,11 +65,13 @@ type svcInfo struct {
 	backends      []lb.Backend
 	backendByHash map[string]*lb.Backend
 
-	svcType                lb.SVCType
-	svcTrafficPolicy       lb.SVCTrafficPolicy
-	svcHealthCheckNodePort uint16
-	svcName                string
-	svcNamespace           string
+	svcType                   lb.SVCType
+	svcTrafficPolicy          lb.SVCTrafficPolicy
+	sessionAffinity           bool
+	sessionAffinityTimeoutSec uint32
+	svcHealthCheckNodePort    uint16
+	svcName                   string
+	svcNamespace              string
 
 	restoredFromDatapath bool
 }
@@ -192,7 +194,9 @@ func (s *Service) InitMaps(ipv6, ipv4, sockMaps, restore bool) error {
 // The first return value is true if the service hasn't existed before.
 func (s *Service) UpsertService(
 	frontend lb.L3n4AddrID, backends []lb.Backend, svcType lb.SVCType,
-	svcTrafficPolicy lb.SVCTrafficPolicy, svcHealthCheckNodePort uint16,
+	svcTrafficPolicy lb.SVCTrafficPolicy,
+	sessionAffinity bool, sessionAffinityTimeoutSec uint32,
+	svcHealthCheckNodePort uint16,
 	svcName, svcNamespace string) (bool, lb.ID, error) {
 
 	s.Lock()
@@ -207,11 +211,16 @@ func (s *Service) UpsertService(
 		logfields.ServiceHealthCheckNodePort: svcHealthCheckNodePort,
 		logfields.ServiceName:                svcName,
 		logfields.ServiceNamespace:           svcNamespace,
+
+		// TODO(brb)
+		"sessionAffinity":        sessionAffinity,
+		"sessionAffinityTimeout": sessionAffinityTimeoutSec,
 	})
 	scopedLog.Debug("Upserting service")
 
 	// If needed, create svcInfo and allocate service ID
 	svc, new, err := s.createSVCInfoIfNotExist(frontend, svcType, svcTrafficPolicy,
+		sessionAffinity, sessionAffinityTimeoutSec,
 		svcHealthCheckNodePort, svcName, svcNamespace)
 	if err != nil {
 		return false, lb.ID(0), err
@@ -371,6 +380,7 @@ func (s *Service) createSVCInfoIfNotExist(
 	frontend lb.L3n4AddrID,
 	svcType lb.SVCType,
 	svcTrafficPolicy lb.SVCTrafficPolicy,
+	sessionAffinity bool, sessionAffinityTimeoutSec uint32,
 	svcHealthCheckNodePort uint16,
 	svcName, svcNamespace string,
 ) (*svcInfo, bool, error) {
@@ -396,6 +406,9 @@ func (s *Service) createSVCInfoIfNotExist(
 			svcName:      svcName,
 			svcNamespace: svcNamespace,
 
+			sessionAffinity:           sessionAffinity,
+			sessionAffinityTimeoutSec: sessionAffinityTimeoutSec,
+
 			svcTrafficPolicy:       svcTrafficPolicy,
 			svcHealthCheckNodePort: svcHealthCheckNodePort,
 		}
@@ -405,6 +418,8 @@ func (s *Service) createSVCInfoIfNotExist(
 		svc.svcType = svcType
 		svc.svcTrafficPolicy = svcTrafficPolicy
 		svc.svcHealthCheckNodePort = svcHealthCheckNodePort
+		svc.sessionAffinity = sessionAffinity
+		svc.sessionAffinityTimeoutSec = sessionAffinityTimeoutSec
 		// Name and namespace are both optional and intended for exposure via
 		// API. They they are not part of any BPF maps and cannot be restored
 		// from datapath.
@@ -460,7 +475,8 @@ func (s *Service) upsertServiceIntoLBMaps(svc *svcInfo, prevBackendCount int,
 		uint16(svc.frontend.ID), svc.frontend.L3n4Addr.IP,
 		svc.frontend.L3n4Addr.L4Addr.Port,
 		backendIDs, prevBackendCount,
-		ipv6, svcType, svc.requireNodeLocalBackends())
+		ipv6, svcType, svc.requireNodeLocalBackends(),
+		svc.sessionAffinity, svc.sessionAffinityTimeoutSec)
 	if err != nil {
 		return err
 	}

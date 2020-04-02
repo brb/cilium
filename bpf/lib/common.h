@@ -555,14 +555,18 @@ struct lb6_key {
 
 /* See lb4_service comments */
 struct lb6_service {
-	__u32 backend_id;
+	union {
+		__u32 backend_id;			/* Backend ID in lb6_backends */
+		__u32 session_affinity_timeout;		/* In seconds, only for master svc */
+	};
 	__u16 count;
 	__u16 rev_nat_index;
 	__u8 external:1,	/* K8s External IPs */
 	     nodeport:1,	/* K8s NodePort service */
 	     local_scope:1,	/* K8s externalTrafficPolicy=Local */
 	     hostport:1,	/* K8s hostPort forwarding */
-	     reserved:4;
+	     session_affinity:1,/* K8s sessionAffinity=clientIP */
+	     reserved:3;
 	__u8 pad[3];
 };
 
@@ -601,7 +605,10 @@ struct lb4_key {
 };
 
 struct lb4_service {
-	__u32 backend_id;	/* Backend ID in lb4_backends */
+	union {
+		__u32 backend_id;		/* Backend ID in lb4_backends */
+		__u32 affinity_timeout;		/* In seconds, only for master svc */
+	};
 	/* For the master service, count denotes number of service endpoints.
 	 * For service endpoints, zero. (Previously, legacy service ID)
 	 */
@@ -611,7 +618,8 @@ struct lb4_service {
 	     nodeport:1,	/* K8s NodePort service */
 	     local_scope:1,	/* K8s externalTrafficPolicy=Local */
 	     hostport:1,	/* K8s hostPort forwarding */
-	     reserved:4;
+	     affinity:1,	/* K8s sessionAffinity=clientIP */
+	     reserved:3;
 	__u8 pad[3];
 };
 
@@ -638,6 +646,20 @@ struct ipv4_revnat_entry {
 	__be32 address;
 	__be16 port;
 	__u16 rev_nat_index;
+};
+
+struct lb4_affinity_key {
+	__be32 address;
+	__be16 dport;
+	__u8 proto;
+	__u8 netns_cookie:1,
+	     reserved:7;
+	__u64 client_id; // if netns_cookie=1, then it's cookie, otherwise, hash_64(client_ip)
+};
+
+struct lb4_affinity_val {
+	__u32 backend_id;
+	__u64 last_used;
 };
 
 struct ct_state {

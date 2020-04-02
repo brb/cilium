@@ -77,6 +77,15 @@ struct bpf_elf_map __section_maps LB4_BACKEND_MAP = {
 	.flags          = CONDITIONAL_PREALLOC,
 };
 
+struct bpf_elf_map __section_maps LB4_AFFINITY_MAP = {
+	.type		= BPF_MAP_TYPE_LRU_HASH,
+	.size_key	= sizeof(struct lb4_affinity_key),
+	.size_value	= sizeof(struct lb4_affinity_val),
+	.pinning	= PIN_GLOBAL_NS,
+	.max_elem	= 10000, // TODO(brb)
+	.flags		= 0,
+};
+
 #endif /* ENABLE_IPV4 */
 
 
@@ -946,6 +955,35 @@ drop_no_service:
 		tuple->flags = flags;
 		return DROP_NO_SERVICE;
 }
+
+static __always_inline
+struct lb4_affinity_val *lb4_lookup_affinity(struct lb4_key *svc_key, __u32 svc_affinity_timeout,
+		    bool netns_cookie, __u64 client_id)
+{
+	__u32 now = bpf_ktime_get_sec();
+	struct lb4_affinity_key key = {	.address = svc_key->address,
+						.dport = svc_key->dport,
+						.netns_cookie = netns_cookie,
+						.client_id = client_id };
+	struct lb4_affinity_val *val;
+
+	val = map_lookup_elem(&LB4_AFFINITY_MAP, &key);
+	if (val != NULL) {
+		if ((val->last_used + svc_affinity_timeout) > now) {
+			// TODO(brb) delete element
+			return NULL;
+		}
+
+		val->last_used = now;
+		if (map_update_elem(&LB4_AFFINITY_MAP, &key, &val, 0) < 0)
+			return NULL;
+
+		return val;
+	}
+
+	return NULL;
+}
+
 #endif /* ENABLE_IPV4 */
 
 #endif /* __LB_H_ */
