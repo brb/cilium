@@ -649,12 +649,12 @@ struct ipv4_revnat_entry {
 };
 
 struct lb4_affinity_key {
-	__be32 address;
-	__be16 dport;
-	__u8 proto;
+	__u64 client_id; // if netns_cookie=1, then it's cookie, otherwise, hash_64(client_ip)
+	__u16 rev_nat_id;
 	__u8 netns_cookie:1,
 	     reserved:7;
-	__u64 client_id; // if netns_cookie=1, then it's cookie, otherwise, hash_64(client_ip)
+	__u8 pad1;
+	__u32 pad2;
 };
 
 struct lb4_affinity_val {

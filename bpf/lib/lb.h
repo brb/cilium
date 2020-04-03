@@ -966,15 +966,14 @@ drop_no_service:
 }
 
 static __always_inline
-int lb4_affinity_backend_id(struct lb4_key *svc_key, __u16 rev_nat_id,
+int lb4_affinity_backend_id(__u16 rev_nat_id,
 			    __u32 svc_affinity_timeout,
 			    bool netns_cookie, __u64 client_id)
 {
 	__u32 now = bpf_ktime_get_sec();
-	struct lb4_affinity_key key = {	.address = svc_key->address,
-					.dport = svc_key->dport,
+	struct lb4_affinity_key key = {	.client_id = client_id,
 					.netns_cookie = netns_cookie,
-					.client_id = client_id };
+					.rev_nat_id = rev_nat_id };
 	struct lb4_affinity_val *val;
 	val = map_lookup_elem(&LB4_AFFINITY_MAP, &key);
 	struct lb4_affinity_match match = { .rev_nat_id = rev_nat_id };
@@ -998,12 +997,12 @@ int lb4_affinity_backend_id(struct lb4_key *svc_key, __u16 rev_nat_id,
 }
 
 static __always_inline
-void lb4_update_affinity(struct lb4_key *svc_key,
-			 bool netns_cookie, __u64 client_id, __u32 backend_id)
+void lb4_update_affinity(__u16 rev_nat_id,
+			 bool netns_cookie, __u64 client_id,
+			 __u32 backend_id)
 {
 	__u32 now = bpf_ktime_get_sec();
-	struct lb4_affinity_key key = {	.address = svc_key->address,
-					.dport = svc_key->dport,
+	struct lb4_affinity_key key = {	.rev_nat_id = rev_nat_id,
 					.netns_cookie = netns_cookie,
 					.client_id = client_id };
 	struct lb4_affinity_val val = { .last_used = now,

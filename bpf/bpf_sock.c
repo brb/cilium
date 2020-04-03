@@ -282,8 +282,9 @@ static __always_inline int __sock4_xlate(struct bpf_sock_addr *ctx,
 		client_id = get_netns_cookie(ctx);
 		*/
 		client_id = 666;
-		backend_id = lb4_affinity_backend_id(&key, svc->rev_nat_index,
-						     svc->affinity_timeout, true, client_id);
+		backend_id = lb4_affinity_backend_id(svc->rev_nat_index,
+						     svc->affinity_timeout,
+						     true, client_id);
 	}
 
 	if (backend_id == 0) {
@@ -297,7 +298,7 @@ static __always_inline int __sock4_xlate(struct bpf_sock_addr *ctx,
 	}
 
 	if (svc->affinity) {
-		lb4_update_affinity(&key, true, client_id, backend_id);
+		lb4_update_affinity(svc->rev_nat_index, true, client_id, backend_id);
 	}
 
 	backend = __lb4_lookup_backend(backend_id);
