@@ -175,7 +175,8 @@ func (h *HeaderfileWriter) WriteNodeConfig(w io.Writer, cfg *datapath.LocalNodeC
 	cDefinesMap["LB4_REVERSE_NAT_MAP"] = "cilium_lb4_reverse_nat"
 	cDefinesMap["LB4_SERVICES_MAP_V2"] = "cilium_lb4_services_v2"
 	cDefinesMap["LB4_BACKEND_MAP"] = "cilium_lb4_backends"
-	cDefinesMap["LB4_AFFINITY_MAP"] = "cilium_lb4_affinity" // TODO(brb) define lbmap
+	cDefinesMap["LB4_AFFINITY_MAP"] = "cilium_lb4_affinity"             // TODO(brb) define lbmap
+	cDefinesMap["LB4_AFFINITY_MATCH_MAP"] = "cilium_lb4_affinity_match" // TODO(brb) define lbmap
 	cDefinesMap["LB4_REVERSE_NAT_SK_MAP"] = lbmap.SockRevNat4MapName
 	cDefinesMap["LB4_REVERSE_NAT_SK_MAP_SIZE"] = fmt.Sprintf("%d", lbmap.SockRevNat4MapSize)
 

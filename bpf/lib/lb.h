@@ -86,6 +86,15 @@ struct bpf_elf_map __section_maps LB4_AFFINITY_MAP = {
 	.flags		= 0,
 };
 
+struct bpf_elf_map __section_maps LB4_AFFINITY_MATCH_MAP = {
+	.type		= BPF_MAP_TYPE_HASH,
+	.size_key	= sizeof(struct lb4_affinity_match),
+	.size_value	= sizeof(__u8),
+	.pinning	= PIN_GLOBAL_NS,
+	.max_elem	= 10000, // TODO(brb)
+	.flags		= CONDITIONAL_PREALLOC,
+};
+
 #endif /* ENABLE_IPV4 */
 
 
@@ -957,7 +966,7 @@ drop_no_service:
 }
 
 static __always_inline
-int lb4_affinity_backend_id(struct lb4_key *svc_key,
+int lb4_affinity_backend_id(struct lb4_key *svc_key, __u16 rev_nat_id,
 			    __u32 svc_affinity_timeout,
 			    bool netns_cookie, __u64 client_id)
 {
@@ -968,6 +977,7 @@ int lb4_affinity_backend_id(struct lb4_key *svc_key,
 					.client_id = client_id };
 	struct lb4_affinity_val *val;
 	val = map_lookup_elem(&LB4_AFFINITY_MAP, &key);
+	struct lb4_affinity_match match __maybe_unused = { .rev_nat_id = rev_nat_id };
 
 	if (val != NULL) {
 		if ((val->last_used + svc_affinity_timeout) < now) {
@@ -975,11 +985,11 @@ int lb4_affinity_backend_id(struct lb4_key *svc_key,
 			return 0;
 		}
 
-		// TODO(brb) can't remove this statement, as otherwise
-		// compilation fails
-		val->last_used = now;
-		if (map_update_elem(&LB4_AFFINITY_MAP, &key, val, 0) < 0)
+		match.backend_id = val->backend_id;
+		if (map_lookup_elem(&LB4_AFFINITY_MATCH_MAP, &match) == NULL) {
+			map_delete_elem(&LB4_AFFINITY_MAP, &key);
 			return 0;
+		}
 
 		return val->backend_id;
 	}

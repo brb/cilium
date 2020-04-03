@@ -147,7 +147,7 @@ struct bpf_elf_map __section_maps LB4_REVERSE_NAT_SK_MAP = {
 static __always_inline int sock4_update_revnat(struct bpf_sock_addr *ctx,
 					       struct lb4_backend *backend,
 					       struct lb4_key *lkey,
-					       struct lb4_service *slave_svc)
+					       __u16 rev_nat_id)
 {
 	struct ipv4_revnat_tuple rkey = {};
 	struct ipv4_revnat_entry rval = {};
@@ -158,7 +158,7 @@ static __always_inline int sock4_update_revnat(struct bpf_sock_addr *ctx,
 
 	rval.address = lkey->address;
 	rval.port = lkey->dport;
-	rval.rev_nat_index = slave_svc->rev_nat_index;
+	rval.rev_nat_index = rev_nat_id;
 
 	return map_update_elem(&LB4_REVERSE_NAT_SK_MAP, &rkey,
 			       &rval, 0);
@@ -168,7 +168,7 @@ static __always_inline
 int sock4_update_revnat(struct bpf_sock_addr *ctx __maybe_unused,
 			struct lb4_backend *backend __maybe_unused,
 			struct lb4_key *lkey __maybe_unused,
-			struct lb4_service *slave_svc __maybe_unused)
+			__u16 rev_nat_id __maybe_unused)
 {
 	return -1;
 }
@@ -279,8 +279,8 @@ static __always_inline int __sock4_xlate(struct bpf_sock_addr *ctx,
 	if (svc->affinity) {
 		key.dport = ctx_dst_port(ctx);
 		// TODO(brb) get_netns_cookie
-		// 2. if found, check whether address,key,backend_id still present
-		backend_id = lb4_affinity_backend_id(&key, svc->affinity_timeout, true, client_id);
+		backend_id = lb4_affinity_backend_id(&key, svc->rev_nat_index,
+						     svc->affinity_timeout, true, client_id);
 	}
 
 	if (backend_id == 0) {
@@ -309,7 +309,7 @@ static __always_inline int __sock4_xlate(struct bpf_sock_addr *ctx,
 	}
 
 	if (sock4_update_revnat(ctx_full, backend, &key,
-				slave_svc) < 0) {
+				svc->rev_nat_index) < 0) {
 		update_metrics(0, METRIC_EGRESS, REASON_LB_REVNAT_UPDATE);
 		return -ENOMEM;
 	}
@@ -373,6 +373,60 @@ int sock4_post_bind(struct bpf_sock *ctx)
 #endif /* ENABLE_NODEPORT || ENABLE_EXTERNAL_IP */
 
 #ifdef ENABLE_HOST_SERVICES_UDP
+<<<<<<< HEAD
+=======
+static __always_inline int __sock4_xlate_snd(struct bpf_sock_addr *ctx,
+					     struct bpf_sock_addr *ctx_full)
+{
+	const bool in_hostns = ctx_in_hostns(ctx_full);
+	struct lb4_key lkey = {
+		.address	= ctx->user_ip4,
+		.dport		= ctx_dst_port(ctx),
+	};
+	struct lb4_backend *backend;
+	struct lb4_service *svc;
+	struct lb4_service *slave_svc;
+
+	svc = lb4_lookup_service(&lkey);
+	if (!svc) {
+		lkey.dport = ctx_dst_port(ctx);
+		svc = sock4_nodeport_wildcard_lookup(&lkey, true, in_hostns);
+		if (svc && !lb4_svc_is_nodeport(svc))
+			svc = NULL;
+	}
+	if (!svc)
+		return -ENXIO;
+
+	if (sock4_skip_xlate(svc, in_hostns, ctx->user_ip4))
+		return -EPERM;
+
+	lkey.slave = (sock_local_cookie(ctx_full) % svc->count) + 1;
+
+	slave_svc = __lb4_lookup_slave(&lkey);
+	if (!slave_svc) {
+		update_metrics(0, METRIC_EGRESS, REASON_LB_NO_SLAVE);
+		return -ENOENT;
+	}
+
+	backend = __lb4_lookup_backend(slave_svc->backend_id);
+	if (!backend) {
+		update_metrics(0, METRIC_EGRESS, REASON_LB_NO_BACKEND);
+		return -ENOENT;
+	}
+
+	if (sock4_update_revnat(ctx_full, backend, &lkey,
+				svc->rev_nat_index) < 0) {
+		update_metrics(0, METRIC_EGRESS, REASON_LB_REVNAT_UPDATE);
+		return -ENOMEM;
+	}
+
+	ctx->user_ip4 = backend->address;
+	ctx_set_port(ctx, backend->port);
+
+	return 0;
+}
+
+>>>>>>> 93b58461f... WIP: affinity match map
 __section("snd-sock4")
 int sock4_xlate_snd(struct bpf_sock_addr *ctx)
 {
