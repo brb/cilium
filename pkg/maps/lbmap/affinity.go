@@ -19,6 +19,7 @@ import (
 	"unsafe"
 
 	"github.com/cilium/cilium/pkg/bpf"
+	"github.com/cilium/cilium/pkg/byteorder"
 )
 
 var (
@@ -55,6 +56,14 @@ type AffinityMatchValue struct {
 	pad uint8 `align:"pad"`
 }
 
+// NewAffinityMatchKey creates the AffinityMatch key
+func NewAffinityMatchKey(revNATID uint16, backendID uint32) *AffinityMatchKey {
+	return &AffinityMatchKey{
+		backendID: backendID,
+		revNATID:  revNATID,
+	}
+}
+
 // GetKeyPtr returns the unsafe pointer to the BPF key
 func (k *AffinityMatchKey) GetKeyPtr() unsafe.Pointer { return unsafe.Pointer(k) }
 
@@ -70,3 +79,10 @@ func (v *AffinityMatchValue) String() string { return "" }
 // NewValue returns a new empty instance of the structure representing the BPF
 // map value.
 func (k *AffinityMatchKey) NewValue() bpf.MapValue { return &AffinityMatchValue{} }
+
+// TODO(brb) explain that for some reasons the rev nat id in the lb map is in network byte order
+func (k *AffinityMatchKey) ToNetwork() *AffinityMatchKey {
+	n := *k
+	n.revNATID = byteorder.HostToNetwork(n.revNATID).(uint16)
+	return &n
+}

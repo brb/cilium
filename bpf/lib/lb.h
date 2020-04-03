@@ -977,7 +977,7 @@ int lb4_affinity_backend_id(struct lb4_key *svc_key, __u16 rev_nat_id,
 					.client_id = client_id };
 	struct lb4_affinity_val *val;
 	val = map_lookup_elem(&LB4_AFFINITY_MAP, &key);
-	struct lb4_affinity_match match __maybe_unused = { .rev_nat_id = rev_nat_id };
+	struct lb4_affinity_match match = { .rev_nat_id = rev_nat_id };
 
 	if (val != NULL) {
 		if ((val->last_used + svc_affinity_timeout) < now) {
@@ -993,7 +993,6 @@ int lb4_affinity_backend_id(struct lb4_key *svc_key, __u16 rev_nat_id,
 
 		return val->backend_id;
 	}
-
 
 	return 0;
 }

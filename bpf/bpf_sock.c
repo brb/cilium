@@ -274,11 +274,14 @@ static __always_inline int __sock4_xlate(struct bpf_sock_addr *ctx,
 	if (sock4_skip_xlate(svc, in_hostns, ctx->user_ip4))
 		return -EPERM;
 
-	__u64 client_id = 666;
+	__u64 client_id = 0;
 
 	if (svc->affinity) {
 		key.dport = ctx_dst_port(ctx);
-		// TODO(brb) get_netns_cookie
+		/*
+		client_id = get_netns_cookie(ctx);
+		*/
+		client_id = 666;
 		backend_id = lb4_affinity_backend_id(&key, svc->rev_nat_index,
 						     svc->affinity_timeout, true, client_id);
 	}

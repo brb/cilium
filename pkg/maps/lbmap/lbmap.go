@@ -190,6 +190,20 @@ func (*LBBPFMap) DeleteBackendByID(id uint16, ipv6 bool) error {
 	return nil
 }
 
+// DeleteAffinityMatch removes the affinity match for the given svc and backend ID
+// tuple from the BPF map
+func (*LBBPFMap) DeleteAffinityMatch(revNATID uint16, backendID uint16) error {
+	return AffinityMatchMap.Delete(
+		NewAffinityMatchKey(revNATID, uint32(backendID)).ToNetwork())
+}
+
+// AddAffinityMatch adds the given affinity match to the BPF map.
+func (*LBBPFMap) AddAffinityMatch(revNATID uint16, backendID uint16) error {
+	return AffinityMatchMap.Update(
+		NewAffinityMatchKey(revNATID, uint32(backendID)).ToNetwork(),
+		&AffinityMatchValue{})
+}
+
 func updateRevNatLocked(key RevNatKey, value RevNatValue) error {
 	if key.GetKey() == 0 {
 		return fmt.Errorf("invalid RevNat ID (0)")
