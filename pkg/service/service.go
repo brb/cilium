@@ -253,18 +253,22 @@ func (s *Service) UpsertService(
 		}
 		s.deleteBackendsFromAffinityMatchMap(svc.frontend.ID, ids)
 	} else if !prevSessionAffinity && sessionAffinity { // for upgrades
-		s.addBackendsToAffinityMatchMap(svc.frontend.ID, svc.backends)
+		ids := make([]lb.BackendID, 0, len(svc.backends))
+		for _, b := range svc.backends {
+			ids = append(ids, b.ID)
+		}
+		s.addBackendsToAffinityMatchMap(svc.frontend.ID, ids)
 	}
 
 	// Update backends cache and allocate/release backend IDs
-	newBackends, removedBackendIDs, obsoleteBackendIDs, err := s.updateBackendsCacheLocked(svc, backendsCopy)
+	newBackends, obsoleteBackendIDs, newSVCBackendIDs, removedSVCBackendIDs, err := s.updateBackendsCacheLocked(svc, backendsCopy)
 	if err != nil {
 		return false, lb.ID(0), err
 	}
 
 	if sessionAffinity {
-		s.addBackendsToAffinityMatchMap(svc.frontend.ID, newBackends)
-		s.deleteBackendsFromAffinityMatchMap(svc.frontend.ID, removedBackendIDs)
+		s.addBackendsToAffinityMatchMap(svc.frontend.ID, newSVCBackendIDs)
+		s.deleteBackendsFromAffinityMatchMap(svc.frontend.ID, removedSVCBackendIDs)
 	}
 
 	// Update lbmaps (BPF service maps)
@@ -465,9 +469,9 @@ func (s *Service) deleteBackendsFromAffinityMatchMap(svcID lb.ID, backendIDs []l
 	}
 }
 
-func (s *Service) addBackendsToAffinityMatchMap(svcID lb.ID, backends []lb.Backend) {
-	for _, b := range backends {
-		s.lbmap.AddAffinityMatch(uint16(svcID), uint16(b.ID))
+func (s *Service) addBackendsToAffinityMatchMap(svcID lb.ID, backendIDs []lb.BackendID) {
+	for _, bID := range backendIDs {
+		s.lbmap.AddAffinityMatch(uint16(svcID), uint16(bID))
 	}
 }
 
@@ -662,11 +666,12 @@ func (s *Service) deleteServiceLocked(svc *svcInfo) error {
 }
 
 func (s *Service) updateBackendsCacheLocked(svc *svcInfo, backends []lb.Backend) (
-	[]lb.Backend, []lb.BackendID, []lb.BackendID, error) {
+	[]lb.Backend, []lb.BackendID, []lb.BackendID, []lb.BackendID, error) {
 
-	obsoleteBackendIDs := []lb.BackendID{} // not used by any SVC
-	removedBackendIDs := []lb.BackendID{}  // removed from SVC, but might be used by other SVCs
-	newBackends := []lb.Backend{}          // previously not used by any SVC
+	obsoleteBackendIDs := []lb.BackendID{}   // not used by any SVC
+	removedSVCBackendIDs := []lb.BackendID{} // removed from SVC, but might be used by other SVCs
+	newSVCBackendIDs := []lb.BackendID{}
+	newBackends := []lb.Backend{} // previously not used by any SVC
 	backendSet := map[string]struct{}{}
 
 	for i, backend := range backends {
@@ -677,7 +682,7 @@ func (s *Service) updateBackendsCacheLocked(svc *svcInfo, backends []lb.Backend)
 			if s.backendRefCount.Add(hash) {
 				id, err := AcquireBackendID(backend.L3n4Addr)
 				if err != nil {
-					return nil, nil, nil, fmt.Errorf("Unable to acquire backend ID for %q: %s",
+					return nil, nil, nil, nil, fmt.Errorf("Unable to acquire backend ID for %q: %s",
 						backend.L3n4Addr, err)
 				}
 				backends[i].ID = id
@@ -688,6 +693,7 @@ func (s *Service) updateBackendsCacheLocked(svc *svcInfo, backends []lb.Backend)
 				backends[i].ID = s.backendByHash[hash].ID
 			}
 			svc.backendByHash[hash] = &backends[i]
+			newSVCBackendIDs = append(newSVCBackendIDs, backends[i].ID)
 		} else {
 			backends[i].ID = b.ID
 		}
@@ -695,7 +701,7 @@ func (s *Service) updateBackendsCacheLocked(svc *svcInfo, backends []lb.Backend)
 
 	for hash, backend := range svc.backendByHash {
 		if _, found := backendSet[hash]; !found {
-			removedBackendIDs = append(removedBackendIDs, backend.ID)
+			removedSVCBackendIDs = append(removedSVCBackendIDs, backend.ID)
 			if s.backendRefCount.Delete(hash) {
 				DeleteBackendID(backend.ID)
 				delete(s.backendByHash, hash)
@@ -706,7 +712,7 @@ func (s *Service) updateBackendsCacheLocked(svc *svcInfo, backends []lb.Backend)
 	}
 
 	svc.backends = backends
-	return newBackends, removedBackendIDs, obsoleteBackendIDs, nil
+	return newBackends, obsoleteBackendIDs, newSVCBackendIDs, removedSVCBackendIDs, nil
 }
 
 func (s *Service) deleteBackendsFromCacheLocked(svc *svcInfo) []lb.BackendID {
