@@ -277,7 +277,6 @@ static __always_inline int __sock4_xlate(struct bpf_sock_addr *ctx,
 	__u64 client_id = 0;
 
 	if (svc->affinity) {
-		key.dport = ctx_dst_port(ctx);
 		/*
 		client_id = get_netns_cookie(ctx);
 		*/
