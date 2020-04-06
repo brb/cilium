@@ -275,7 +275,6 @@ static __always_inline int __sock4_xlate(struct bpf_sock_addr *ctx,
 		return -EPERM;
 
 	__u64 client_id = 0;
-
 	if (svc->affinity) {
 		/*
 		client_id = get_netns_cookie(ctx);
@@ -296,14 +295,14 @@ static __always_inline int __sock4_xlate(struct bpf_sock_addr *ctx,
 		backend_id = slave_svc->backend_id;
 	}
 
-	if (svc->affinity) {
-		lb4_update_affinity(svc->rev_nat_index, true, client_id, backend_id);
-	}
-
 	backend = __lb4_lookup_backend(backend_id);
 	if (!backend) {
 		update_metrics(0, METRIC_EGRESS, REASON_LB_NO_BACKEND);
 		return -ENOENT;
+	}
+
+	if (svc->affinity) {
+		lb4_update_affinity(svc->rev_nat_index, true, client_id, backend_id);
 	}
 
 	/* revnat entry is not required for TCP protocol */
@@ -376,60 +375,6 @@ int sock4_post_bind(struct bpf_sock *ctx)
 #endif /* ENABLE_NODEPORT || ENABLE_EXTERNAL_IP */
 
 #ifdef ENABLE_HOST_SERVICES_UDP
-<<<<<<< HEAD
-=======
-static __always_inline int __sock4_xlate_snd(struct bpf_sock_addr *ctx,
-					     struct bpf_sock_addr *ctx_full)
-{
-	const bool in_hostns = ctx_in_hostns(ctx_full);
-	struct lb4_key lkey = {
-		.address	= ctx->user_ip4,
-		.dport		= ctx_dst_port(ctx),
-	};
-	struct lb4_backend *backend;
-	struct lb4_service *svc;
-	struct lb4_service *slave_svc;
-
-	svc = lb4_lookup_service(&lkey);
-	if (!svc) {
-		lkey.dport = ctx_dst_port(ctx);
-		svc = sock4_nodeport_wildcard_lookup(&lkey, true, in_hostns);
-		if (svc && !lb4_svc_is_nodeport(svc))
-			svc = NULL;
-	}
-	if (!svc)
-		return -ENXIO;
-
-	if (sock4_skip_xlate(svc, in_hostns, ctx->user_ip4))
-		return -EPERM;
-
-	lkey.slave = (sock_local_cookie(ctx_full) % svc->count) + 1;
-
-	slave_svc = __lb4_lookup_slave(&lkey);
-	if (!slave_svc) {
-		update_metrics(0, METRIC_EGRESS, REASON_LB_NO_SLAVE);
-		return -ENOENT;
-	}
-
-	backend = __lb4_lookup_backend(slave_svc->backend_id);
-	if (!backend) {
-		update_metrics(0, METRIC_EGRESS, REASON_LB_NO_BACKEND);
-		return -ENOENT;
-	}
-
-	if (sock4_update_revnat(ctx_full, backend, &lkey,
-				svc->rev_nat_index) < 0) {
-		update_metrics(0, METRIC_EGRESS, REASON_LB_REVNAT_UPDATE);
-		return -ENOMEM;
-	}
-
-	ctx->user_ip4 = backend->address;
-	ctx_set_port(ctx, backend->port);
-
-	return 0;
-}
-
->>>>>>> 93b58461f... WIP: affinity match map
 __section("snd-sock4")
 int sock4_xlate_snd(struct bpf_sock_addr *ctx)
 {
