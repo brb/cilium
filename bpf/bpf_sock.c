@@ -297,6 +297,7 @@ static __always_inline int __sock4_xlate(struct bpf_sock_addr *ctx,
 
 	backend = __lb4_lookup_backend(backend_id);
 	if (!backend) {
+		// TODO (brb) remove backend if affinity=true
 		update_metrics(0, METRIC_EGRESS, REASON_LB_NO_BACKEND);
 		return -ENOENT;
 	}
