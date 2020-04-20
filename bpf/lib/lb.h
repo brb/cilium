@@ -882,6 +882,15 @@ void lb4_update_affinity(__u16 rev_nat_id,
 	map_update_elem(&LB4_AFFINITY_MAP, &key, &val, 0);
 }
 
+static __always_inline
+void lb4_delete_affinity(__u16 rev_nat_id, bool netns_cookie, __u64 client_id)
+{
+	struct lb4_affinity_key key = {	.rev_nat_id = rev_nat_id,
+					.netns_cookie = netns_cookie,
+					.client_id = client_id };
+	map_delete_elem(&LB4_AFFINITY_MAP, &key);
+}
+
 static __always_inline int lb4_local(const void *map, struct __ctx_buff *ctx,
 				     int l3_off, int l4_off,
 				     struct csum_offset *csum_off,
@@ -897,20 +906,23 @@ static __always_inline int lb4_local(const void *map, struct __ctx_buff *ctx,
 	struct lb4_service *slave_svc;
 	int slave;
 	__u32 backend_id = 0;
-	__u64 client_id = 0;
+	bool backend_from_affinity = false;
+	__u64 client_id = saddr;
 	int ret;
 
 	ret = ct_lookup4(map, tuple, ctx, l4_off, CT_SERVICE, state, &monitor);
 	switch(ret) {
 	case CT_NEW:
 		if (svc->affinity) {
-			client_id = saddr;
 			backend_id = lb4_affinity_backend_id(svc->rev_nat_index,
-								svc->affinity_timeout,
-								false, client_id);
+							     svc->affinity_timeout,
+							     false, client_id);
+			backend_from_affinity = true;
 		}
 
 		if (backend_id == 0) {
+reselect_backend:
+			backend_from_affinity = false;
 			/* No CT entry has been found, so select a svc endpoint */
 			slave = lb4_select_slave(svc->count);
 			if ((slave_svc = lb4_lookup_slave(ctx, key, slave)) == NULL) {
@@ -921,6 +933,10 @@ static __always_inline int lb4_local(const void *map, struct __ctx_buff *ctx,
 
 		backend = lb4_lookup_backend(ctx, backend_id);
 		if (backend == NULL) {
+			if (backend_from_affinity) {
+				lb4_delete_affinity(svc->rev_nat_index, false, client_id);
+				goto reselect_backend;
+			}
 			goto drop_no_service;
 		}
 
@@ -937,6 +953,7 @@ static __always_inline int lb4_local(const void *map, struct __ctx_buff *ctx,
 	case CT_ESTABLISHED:
 	case CT_RELATED:
 	case CT_REPLY:
+		// TODO(brb) remove
 		// For backward-compatibility we need to update reverse NAT index
 		// in the CT_SERVICE entry for old connections, as later in the code
 		// we check whether the right backend is used. Having it set to 0
@@ -959,10 +976,10 @@ static __always_inline int lb4_local(const void *map, struct __ctx_buff *ctx,
 	// select a new backend.
 	if (state->rev_nat_index != svc->rev_nat_index) {
 		if (svc->affinity) {
-			client_id = saddr;
 			backend_id = lb4_affinity_backend_id(svc->rev_nat_index,
-								svc->affinity_timeout,
-								false, client_id);
+							     svc->affinity_timeout,
+							     false, client_id);
+			backend_from_affinity = true;
 		}
 
 		if (backend_id == 0) {
@@ -983,6 +1000,8 @@ static __always_inline int lb4_local(const void *map, struct __ctx_buff *ctx,
 	 * session we are likely to get a TCP RST.
 	 */
 	if (!(backend = lb4_lookup_backend(ctx, state->backend_id))) {
+		if (backend_from_affinity)
+			lb4_delete_affinity(svc->rev_nat_index, false, client_id);
 		key->slave = 0;
 		if (!(svc = lb4_lookup_service(key))) {
 			goto drop_no_service;
@@ -1008,7 +1027,7 @@ update_state:
 	state->addr = new_daddr = backend->address;
 
 	if (svc->affinity) {
-		lb4_update_affinity(svc->rev_nat_index, false, client_id, backend_id);
+		lb4_update_affinity(svc->rev_nat_index, false, client_id, state->backend_id);
 	}
 
 #ifndef DISABLE_LOOPBACK_LB
