@@ -246,7 +246,10 @@ static __always_inline int __sock4_xlate(struct bpf_sock_addr *ctx,
 	};
 	struct lb4_service *slave_svc;
 	__u32 backend_id = 0;
+	/* Indicates whether a backend was selected from session affinity */
 	bool backend_from_affinity = false;
+	/* Session affinity id (a netns cookie) */
+	__u64 client_id = 0;
 
 	if (!udp_only && !sock_proto_enabled(ctx->protocol))
 		return -ENOTSUP;
@@ -275,12 +278,8 @@ static __always_inline int __sock4_xlate(struct bpf_sock_addr *ctx,
 	if (sock4_skip_xlate(svc, in_hostns, ctx->user_ip4))
 		return -EPERM;
 
-	__u64 client_id = 0;
 	if (svc->affinity) {
-		/*
 		client_id = get_netns_cookie(ctx);
-		*/
-		client_id = 666;
 		backend_id = lb4_affinity_backend_id(svc->rev_nat_index,
 						     svc->affinity_timeout,
 						     true, client_id);
@@ -302,6 +301,11 @@ reselect_backend:
 	backend = __lb4_lookup_backend(backend_id);
 	if (!backend) {
 		if (backend_from_affinity) {
+			/* Backend from the session affinity no longer exists,
+			 * thus select a new one. Also, remove the affinity,
+			 * so that if the svc doesn't have any backend,
+			 * a subsequent request to the svc doesn't hit
+			 * the reselection again. */
 			lb4_delete_affinity(svc->rev_nat_index, true, client_id);
 			goto reselect_backend;
 		}

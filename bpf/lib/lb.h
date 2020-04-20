@@ -934,6 +934,11 @@ reselect_backend:
 		backend = lb4_lookup_backend(ctx, backend_id);
 		if (backend == NULL) {
 			if (backend_from_affinity) {
+				/* Backend from the session affinity no longer exists,
+				 * thus select a new one. Also, remove the affinity,
+				 * so that if the svc doesn't have any backend,
+				 * a subsequent request to the svc doesn't hit
+				 * the reselection again. */
 				lb4_delete_affinity(svc->rev_nat_index, false, client_id);
 				goto reselect_backend;
 			}
@@ -953,7 +958,6 @@ reselect_backend:
 	case CT_ESTABLISHED:
 	case CT_RELATED:
 	case CT_REPLY:
-		// TODO(brb) remove
 		// For backward-compatibility we need to update reverse NAT index
 		// in the CT_SERVICE entry for old connections, as later in the code
 		// we check whether the right backend is used. Having it set to 0
