@@ -245,8 +245,7 @@ static __always_inline int __sock4_xlate(struct bpf_sock_addr *ctx,
 		.dport		= ctx_dst_port(ctx),
 	};
 	struct lb4_service *slave_svc;
-	__u32 backend_id = 0;
-	bool backend_from_affinity = false;
+	__u32 backend_id = 0; // TODO(brb) double check that backend ID cannot be 0!!!
 
 	if (!udp_only && !sock_proto_enabled(ctx->protocol))
 		return -ENOTSUP;
@@ -284,12 +283,9 @@ static __always_inline int __sock4_xlate(struct bpf_sock_addr *ctx,
 		backend_id = lb4_affinity_backend_id(svc->rev_nat_index,
 						     svc->affinity_timeout,
 						     true, client_id);
-		backend_from_affinity = true;
 	}
 
 	if (backend_id == 0) {
-reselect_backend:
-		backend_from_affinity = false;
 		key.slave = (sock_local_cookie(ctx_full) % svc->count) + 1;
 		slave_svc = __lb4_lookup_slave(&key);
 		if (!slave_svc) {
@@ -301,10 +297,7 @@ reselect_backend:
 
 	backend = __lb4_lookup_backend(backend_id);
 	if (!backend) {
-		if (backend_from_affinity) {
-			lb4_delete_affinity(svc->rev_nat_index, true, client_id);
-			goto reselect_backend;
-		}
+		// TODO (brb) remove backend if affinity=true
 		update_metrics(0, METRIC_EGRESS, REASON_LB_NO_BACKEND);
 		return -ENOENT;
 	}
@@ -313,18 +306,26 @@ reselect_backend:
 		lb4_update_affinity(svc->rev_nat_index, true, client_id, backend_id);
 	}
 
+<<<<<<< HEAD
 	/* revnat entry is not required for TCP protocol */
 	if (!udp_only && ctx->protocol == IPPROTO_TCP) {
 		goto update_dst;
 	}
 
 	if (sock4_update_revnat(ctx_full, backend, &key,
+=======
+	if (ctx->protocol != IPPROTO_TCP &&
+	    sock4_update_revnat(ctx_full, backend, &key,
+>>>>>>> 80e0b9ef9... WIP: missing delete affinity
 				svc->rev_nat_index) < 0) {
 		update_metrics(0, METRIC_EGRESS, REASON_LB_REVNAT_UPDATE);
 		return -ENOMEM;
 	}
 
+<<<<<<< HEAD
 update_dst:
+=======
+>>>>>>> 80e0b9ef9... WIP: missing delete affinity
 	ctx->user_ip4 = backend->address;
 	ctx_set_port(ctx, backend->port);
 
