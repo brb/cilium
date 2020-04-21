@@ -515,6 +515,9 @@ func init() {
 	flags.String(option.NodePortAcceleration, option.NodePortAccelerationNone, "BPF NodePort acceleration via XDP (\"native\", \"none\")")
 	option.BindEnv(option.NodePortAcceleration)
 
+	flags.Bool(option.EnableSessionAffinity, false, "Enable support for service sessionAffinity")
+	option.BindEnv(option.EnableSessionAffinity)
+
 	flags.String(option.LibDir, defaults.LibraryPath, "Directory path to store runtime build environment")
 	option.BindEnv(option.LibDir)
 
@@ -1444,6 +1447,8 @@ func initKubeProxyReplacementOptions() {
 		log.Fatalf("Invalid value for --%s: %s", option.KubeProxyReplacement, option.Config.KubeProxyReplacement)
 	}
 
+	probesManager := probes.NewProbeManager()
+
 	if option.Config.DisableK8sServices {
 		if option.Config.KubeProxyReplacement != option.KubeProxyReplacementDisabled {
 			log.Warnf("Service handling disabled. Auto-disabling --%s from \"%s\" to \"%s\"",
@@ -1464,6 +1469,7 @@ func initKubeProxyReplacementOptions() {
 		option.Config.EnableHostReachableServices = false
 		option.Config.EnableHostServicesTCP = false
 		option.Config.EnableHostServicesUDP = false
+		option.Config.EnableSessionAffinity = false
 
 		return
 	}
@@ -1484,6 +1490,7 @@ func initKubeProxyReplacementOptions() {
 		option.Config.EnableHostReachableServices = true
 		option.Config.EnableHostServicesTCP = true
 		option.Config.EnableHostServicesUDP = true
+		option.Config.EnableSessionAffinity = true
 		option.Config.DisableK8sServices = false
 	}
 
@@ -1515,7 +1522,7 @@ func initKubeProxyReplacementOptions() {
 
 	if option.Config.EnableNodePort {
 		found := false
-		if h := probes.NewProbeManager().GetHelpers("sched_act"); h != nil {
+		if h := probesManager.GetHelpers("sched_act"); h != nil {
 			if _, ok := h["bpf_fib_lookup"]; ok {
 				found = true
 			}
@@ -1621,6 +1628,20 @@ func initKubeProxyReplacementOptions() {
 			log.Warnf("Disabling NodePort's %q mode feature due to tunneling mode being enabled",
 				option.Config.NodePortMode)
 			option.Config.NodePortMode = option.NodePortModeSNAT
+		}
+	}
+
+	if option.Config.EnableSessionAffinity && option.Config.EnableHostReachableServices {
+		found1, found2 := false, false
+		if h := probesManager.GetHelpers("cgroup_sock"); h != nil {
+			_, found1 = h["bpf_get_netns_cookie"]
+		}
+		if h := probesManager.GetHelpers("cgroup_sock_addr"); h != nil {
+			_, found2 = h["bpf_get_netns_cookie"]
+		}
+		if !(found1 && found2) {
+			log.Warnf("sessionAffinity for host reachable services needs kernel 5.7.0 or newer. " +
+				"Disabling sessionAffinity for cases when a service is accessed from a cluster.")
 		}
 	}
 }
