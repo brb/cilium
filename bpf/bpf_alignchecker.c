@@ -74,7 +74,7 @@ int main() {
     DECLARE(union, macaddr, iter);
     DECLARE(struct, lb4_affinity_key, iter);
     DECLARE(struct, lb4_affinity_val, iter);
-    DECLARE(struct, lb4_affinity_match, iter);
+    DECLARE(struct, lb_affinity_match, iter);
 
     return 0;
 }

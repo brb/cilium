@@ -663,7 +663,7 @@ struct lb4_affinity_val {
 	__u32 pad;
 };
 
-struct lb4_affinity_match {
+struct lb_affinity_match {
 	__u32 backend_id;
 	__u16 rev_nat_id;
 	__u16 pad;
