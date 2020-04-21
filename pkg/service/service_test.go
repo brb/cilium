@@ -68,8 +68,8 @@ var (
 )
 
 func (m *ManagerTestSuite) TestUpsertAndDeleteService(c *C) {
-	// Should create a new service with two backends
-	created, id1, err := m.svc.UpsertService(frontend1, backends1, lb.SVCTypeNodePort, lb.SVCTrafficPolicyCluster, false, 0, 0, "svc1", "ns1")
+	// Should create a new service with two backends and session affinity
+	created, id1, err := m.svc.UpsertService(frontend1, backends1, lb.SVCTypeNodePort, lb.SVCTrafficPolicyCluster, true, 100, 0, "svc1", "ns1")
 	c.Assert(err, IsNil)
 	c.Assert(created, Equals, true)
 	c.Assert(id1, Equals, lb.ID(1))
@@ -77,8 +77,16 @@ func (m *ManagerTestSuite) TestUpsertAndDeleteService(c *C) {
 	c.Assert(len(m.lbmap.BackendByID), Equals, 2)
 	c.Assert(m.svc.svcByID[id1].svcName, Equals, "svc1")
 	c.Assert(m.svc.svcByID[id1].svcNamespace, Equals, "ns1")
+	c.Assert(m.svc.svcByID[id1].sessionAffinity, Equals, true)
+	c.Assert(m.svc.svcByID[id1].sessionAffinityTimeoutSec, Equals, uint32(100))
+	c.Assert(m.lbmap.ServiceByID[uint16(id1)].SessionAffinity, Equals, true)
+	c.Assert(m.lbmap.ServiceByID[uint16(id1)].SessionAffinityTimeoutSec, Equals, uint32(100))
+	c.Assert(len(m.lbmap.AffinityMatch[uint16(id1)]), Equals, 2)
+	for bID := range m.lbmap.BackendByID {
+		c.Assert(m.lbmap.AffinityMatch[uint16(id1)][bID], Equals, struct{}{})
+	}
 
-	// Should update nothing
+	// Should remove session affinity
 	created, id1, err = m.svc.UpsertService(frontend1, backends1, lb.SVCTypeNodePort, lb.SVCTrafficPolicyCluster, false, 0, 0, "", "")
 	c.Assert(err, IsNil)
 	c.Assert(created, Equals, false)
@@ -87,6 +95,9 @@ func (m *ManagerTestSuite) TestUpsertAndDeleteService(c *C) {
 	c.Assert(len(m.lbmap.BackendByID), Equals, 2)
 	c.Assert(m.svc.svcByID[id1].svcName, Equals, "svc1")
 	c.Assert(m.svc.svcByID[id1].svcNamespace, Equals, "ns1")
+	c.Assert(len(m.lbmap.AffinityMatch[uint16(id1)]), Equals, 0)
+	c.Assert(m.svc.svcByID[id1].sessionAffinity, Equals, false)
+	c.Assert(m.lbmap.ServiceByID[uint16(id1)].SessionAffinity, Equals, false)
 	// TODO(brb) test that backends are the same
 	// TODO(brb) check that .backends =~ .backendsByHash
 
@@ -139,7 +150,7 @@ func (m *ManagerTestSuite) TestUpsertAndDeleteService(c *C) {
 func (m *ManagerTestSuite) TestRestoreServices(c *C) {
 	_, id1, err := m.svc.UpsertService(frontend1, backends1, lb.SVCTypeNodePort, lb.SVCTrafficPolicyCluster, false, 0, 0, "", "")
 	c.Assert(err, IsNil)
-	_, id2, err := m.svc.UpsertService(frontend2, backends2, lb.SVCTypeClusterIP, lb.SVCTrafficPolicyCluster, false, 0, 0, "", "")
+	_, id2, err := m.svc.UpsertService(frontend2, backends2, lb.SVCTypeClusterIP, lb.SVCTrafficPolicyCluster, true, 200, 0, "", "")
 	c.Assert(err, IsNil)
 
 	// Restart service, but keep the lbmap to restore services from
@@ -163,6 +174,11 @@ func (m *ManagerTestSuite) TestRestoreServices(c *C) {
 	c.Assert(m.svc.svcByID[id1].backends, checker.DeepEquals, lbmap.ServiceByID[uint16(id1)].Backends)
 	c.Assert(m.svc.svcByID[id2].frontend, checker.DeepEquals, lbmap.ServiceByID[uint16(id2)].Frontend)
 	c.Assert(m.svc.svcByID[id2].backends, checker.DeepEquals, lbmap.ServiceByID[uint16(id2)].Backends)
+
+	// Session affinity too
+	c.Assert(m.svc.svcByID[id1].sessionAffinity, Equals, false)
+	c.Assert(m.svc.svcByID[id2].sessionAffinity, Equals, true)
+	c.Assert(m.svc.svcByID[id2].sessionAffinityTimeoutSec, Equals, uint32(200))
 }
 
 func (m *ManagerTestSuite) TestSyncWithK8sFinished(c *C) {
