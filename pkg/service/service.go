@@ -214,9 +214,8 @@ func (s *Service) UpsertService(
 		logfields.ServiceName:                svcName,
 		logfields.ServiceNamespace:           svcNamespace,
 
-		// TODO(brb)
-		"sessionAffinity":        sessionAffinity,
-		"sessionAffinityTimeout": sessionAffinityTimeoutSec,
+		logfields.SessionAffinity:        sessionAffinity,
+		logfields.SessionAffinityTimeout: sessionAffinityTimeoutSec,
 	})
 	scopedLog.Debug("Upserting service")
 
