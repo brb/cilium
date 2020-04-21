@@ -244,16 +244,17 @@ func (s *Service) UpsertService(
 		backendsCopy = append(backendsCopy, *b.DeepCopy())
 	}
 
-	// TODO(brb) check that Restore...() restores sessionAffinity
 	if prevSessionAffinity && !sessionAffinity {
-		// Remove backends from affinity match because the svc sessionAffinity
+		// Remove backends from the affinity match because the svc's sessionAffinity
 		// has been disabled
 		ids := make([]lb.BackendID, 0, len(svc.backends))
 		for _, b := range svc.backends {
 			ids = append(ids, b.ID)
 		}
 		s.deleteBackendsFromAffinityMatchMap(svc.frontend.ID, ids)
-	} else if !prevSessionAffinity && sessionAffinity { // for upgrades
+	} else if !prevSessionAffinity && sessionAffinity {
+		// The svc's session affinity has been just enabled, add the backends to
+		// the affinity match
 		ids := make([]lb.BackendID, 0, len(svc.backends))
 		for _, b := range svc.backends {
 			ids = append(ids, b.ID)
@@ -268,6 +269,7 @@ func (s *Service) UpsertService(
 	}
 
 	if sessionAffinity {
+		// Remove the removed backends from the affinity match, and add the new ones
 		s.addBackendsToAffinityMatchMap(svc.frontend.ID, newSVCBackendIDs)
 		s.deleteBackendsFromAffinityMatchMap(svc.frontend.ID, removedSVCBackendIDs)
 	}
