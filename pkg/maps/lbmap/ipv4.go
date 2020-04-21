@@ -215,7 +215,8 @@ func (s *Service4Value) SetFlags(flags uint8) { s.Flags = flags }
 func (s *Service4Value) GetFlags() uint8      { return s.Flags }
 
 func (s *Service4Value) SetSessionAffinityTimeoutSec(t uint32) {
-	// TODO(brb) explain this hack
+	// Go doesn't support union types, so we use BackendID to access the
+	// lb4_service.affinity_timeout field
 	s.BackendID = t
 }
 
