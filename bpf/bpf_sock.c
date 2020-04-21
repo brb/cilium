@@ -248,8 +248,6 @@ static __always_inline int __sock4_xlate(struct bpf_sock_addr *ctx,
 	__u32 backend_id = 0;
 	/* Indicates whether a backend was selected from session affinity */
 	bool backend_from_affinity = false;
-	/* Session affinity id (a netns cookie) */
-	__u64 client_id = 0;
 
 	if (!udp_only && !sock_proto_enabled(ctx->protocol))
 		return -ENOTSUP;
@@ -278,6 +276,9 @@ static __always_inline int __sock4_xlate(struct bpf_sock_addr *ctx,
 	if (sock4_skip_xlate(svc, in_hostns, ctx->user_ip4))
 		return -EPERM;
 
+#if defined(ENABLE_SESSION_AFFINITY) && defined(BPF_HAVE_NETNS_COOKIE)
+	/* Session affinity id (a netns cookie) */
+	__u64 client_id = 0;
 	if (svc->affinity) {
 		client_id = get_netns_cookie(ctx);
 		backend_id = lb4_affinity_backend_id(svc->rev_nat_index,
@@ -285,9 +286,10 @@ static __always_inline int __sock4_xlate(struct bpf_sock_addr *ctx,
 						     true, client_id);
 		backend_from_affinity = true;
 	}
+#endif
 
 	if (backend_id == 0) {
-reselect_backend:
+reselect_backend: __maybe_unused
 		backend_from_affinity = false;
 		key.slave = (sock_local_cookie(ctx_full) % svc->count) + 1;
 		slave_svc = __lb4_lookup_slave(&key);
@@ -300,6 +302,7 @@ reselect_backend:
 
 	backend = __lb4_lookup_backend(backend_id);
 	if (!backend) {
+#if defined(ENABLE_SESSION_AFFINITY) && defined(BPF_HAVE_NETNS_COOKIE)
 		if (backend_from_affinity) {
 			/* Backend from the session affinity no longer exists,
 			 * thus select a new one. Also, remove the affinity,
@@ -309,13 +312,16 @@ reselect_backend:
 			lb4_delete_affinity(svc->rev_nat_index, true, client_id);
 			goto reselect_backend;
 		}
+#endif
 		update_metrics(0, METRIC_EGRESS, REASON_LB_NO_BACKEND);
 		return -ENOENT;
 	}
 
+#if defined(ENABLE_SESSION_AFFINITY) && defined(BPF_HAVE_NETNS_COOKIE)
 	if (svc->affinity) {
 		lb4_update_affinity(svc->rev_nat_index, true, client_id, backend_id);
 	}
+#endif
 
 	/* revnat entry is not required for TCP protocol */
 	if (!udp_only && ctx->protocol == IPPROTO_TCP) {
