@@ -246,6 +246,8 @@ func (s *Service) UpsertService(
 
 	// TODO(brb) check that Restore...() restores sessionAffinity
 	if prevSessionAffinity && !sessionAffinity {
+		// Remove backends from affinity match because the svc sessionAffinity
+		// has been disabled
 		ids := make([]lb.BackendID, 0, len(svc.backends))
 		for _, b := range svc.backends {
 			ids = append(ids, b.ID)
@@ -463,14 +465,23 @@ func (s *Service) createSVCInfoIfNotExist(
 
 func (s *Service) deleteBackendsFromAffinityMatchMap(svcID lb.ID, backendIDs []lb.BackendID) {
 	for _, bID := range backendIDs {
-		// TODO(brb) comment about uint16(backendID) (link to GH PR)
-		s.lbmap.DeleteAffinityMatch(uint16(svcID), uint16(bID))
+		if err := s.lbmap.DeleteAffinityMatch(uint16(svcID), uint16(bID)); err != nil {
+			log.WithFields(logrus.Fields{
+				logfields.BackendID: bID,
+				logfields.ServiceID: svcID,
+			}).WithError(err).Warn("Unable to remove entry from affinity match map")
+		}
 	}
 }
 
 func (s *Service) addBackendsToAffinityMatchMap(svcID lb.ID, backendIDs []lb.BackendID) {
 	for _, bID := range backendIDs {
-		s.lbmap.AddAffinityMatch(uint16(svcID), uint16(bID))
+		if err := s.lbmap.AddAffinityMatch(uint16(svcID), uint16(bID)); err != nil {
+			log.WithFields(logrus.Fields{
+				logfields.BackendID: bID,
+				logfields.ServiceID: svcID,
+			}).WithError(err).Warn("Unable to add entry to affinity match map")
+		}
 	}
 }
 
@@ -600,6 +611,10 @@ func (s *Service) restoreServicesLocked() error {
 			// service cache has been initialized
 			svcType:          svc.Type,
 			svcTrafficPolicy: svc.TrafficPolicy,
+
+			sessionAffinity:           svc.SessionAffinity,
+			sessionAffinityTimeoutSec: svc.SessionAffinityTimeoutSec,
+
 			// Indicate that the svc was restored from the BPF maps, so that
 			// SyncWithK8sFinished() could remove services which were restored
 			// from the maps but not present in the k8sServiceCache (e.g. a svc

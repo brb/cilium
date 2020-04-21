@@ -22,14 +22,16 @@ import (
 )
 
 type LBMockMap struct {
-	BackendByID map[uint16]*lb.Backend
-	ServiceByID map[uint16]*lb.SVC
+	BackendByID   map[uint16]*lb.Backend
+	ServiceByID   map[uint16]*lb.SVC
+	AffinityMatch map[uint16]map[uint16]struct{} // svc ID => [backend IDs]
 }
 
 func NewLBMockMap() *LBMockMap {
 	return &LBMockMap{
-		BackendByID: map[uint16]*lb.Backend{},
-		ServiceByID: map[uint16]*lb.SVC{},
+		BackendByID:   map[uint16]*lb.Backend{},
+		ServiceByID:   map[uint16]*lb.SVC{},
+		AffinityMatch: map[uint16]map[uint16]struct{}{},
 	}
 }
 
@@ -117,9 +119,25 @@ func (m *LBMockMap) DumpBackendMaps() ([]*lb.Backend, error) {
 }
 
 func (m *LBMockMap) AddAffinityMatch(revNATID uint16, backendID uint16) error {
-	return fmt.Errorf("NYI")
+	if _, ok := m.AffinityMatch[revNATID]; !ok {
+		m.AffinityMatch[revNATID] = map[uint16]struct{}{}
+	}
+	if _, ok := m.AffinityMatch[revNATID][backendID]; ok {
+		return fmt.Errorf("Backend %d already exists in %d affinity map",
+			backendID, revNATID)
+	}
+	m.AffinityMatch[revNATID][backendID] = struct{}{}
+	return nil
 }
 
 func (m *LBMockMap) DeleteAffinityMatch(revNATID uint16, backendID uint16) error {
-	return fmt.Errorf("NYI")
+	if _, ok := m.AffinityMatch[revNATID]; !ok {
+		return fmt.Errorf("Affinity map for %d does not exist", revNATID)
+	}
+	if _, ok := m.AffinityMatch[revNATID][backendID]; !ok {
+		return fmt.Errorf("Backend %d does not exist in %d affinity map",
+			backendID, revNATID)
+	}
+	delete(m.AffinityMatch[revNATID], backendID)
+	return nil
 }
