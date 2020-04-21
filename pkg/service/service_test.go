@@ -22,7 +22,6 @@ import (
 	"github.com/cilium/cilium/pkg/checker"
 	lb "github.com/cilium/cilium/pkg/loadbalancer"
 	"github.com/cilium/cilium/pkg/maps/lbmap"
-	"github.com/cilium/cilium/pkg/node"
 	nodeTypes "github.com/cilium/cilium/pkg/node/types"
 	"github.com/cilium/cilium/pkg/option"
 	"github.com/cilium/cilium/pkg/service/healthserver"
