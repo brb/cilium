@@ -22,8 +22,13 @@ import (
 	"github.com/cilium/cilium/pkg/byteorder"
 )
 
+const (
+	AffinityMatchMapName = "cilium_lb_affinity_match"
+)
+
 var (
-	AffinityMatchMap = bpf.NewMap("cilium_lb4_affinity_match",
+	AffinityMatchMap = bpf.NewMap(
+		AffinityMatchMapName,
 		bpf.MapTypeHash,
 		&AffinityMatchKey{},
 		int(unsafe.Sizeof(AffinityMatchKey{})),
@@ -70,19 +75,21 @@ func (k *AffinityMatchKey) GetKeyPtr() unsafe.Pointer { return unsafe.Pointer(k)
 // GetValuePtr returns the unsafe pointer to the BPF value
 func (v *AffinityMatchValue) GetValuePtr() unsafe.Pointer { return unsafe.Pointer(v) }
 
-// String converts the key into a human readable string format.
+// String converts the key into a human readable string format
 func (k *AffinityMatchKey) String() string { return fmt.Sprintf("%d %d", k.backendID, k.revNATID) }
 
-// String converts the value into a human readable string format.
+// String converts the value into a human readable string format
 func (v *AffinityMatchValue) String() string { return "" }
 
 // NewValue returns a new empty instance of the structure representing the BPF
-// map value.
+// map value
 func (k *AffinityMatchKey) NewValue() bpf.MapValue { return &AffinityMatchValue{} }
 
-// TODO(brb) explain that for some reasons the rev nat id in the lb map is in network byte order
+// ToNetwork returns the key in the network byte order
 func (k *AffinityMatchKey) ToNetwork() *AffinityMatchKey {
 	n := *k
+	// For some reasons rev_nat_index is stored in network byte order in
+	// the SVC BPF maps
 	n.revNATID = byteorder.HostToNetwork(n.revNATID).(uint16)
 	return &n
 }

@@ -86,19 +86,20 @@ struct bpf_elf_map __section_maps LB4_AFFINITY_MAP = {
 	.max_elem	= 10000, // TODO(brb)
 	.flags		= 0,
 };
+#endif
 
-struct bpf_elf_map __section_maps LB4_AFFINITY_MATCH_MAP = {
+#endif /* ENABLE_IPV4 */
+
+#ifdef ENABLE_SESSION_AFFINITY
+struct bpf_elf_map __section_maps LB_AFFINITY_MATCH_MAP = {
 	.type		= BPF_MAP_TYPE_HASH,
-	.size_key	= sizeof(struct lb4_affinity_match),
+	.size_key	= sizeof(struct lb_affinity_match),
 	.size_value	= sizeof(__u8),
 	.pinning	= PIN_GLOBAL_NS,
 	.max_elem	= 10000, // TODO(brb)
 	.flags		= CONDITIONAL_PREALLOC,
 };
 #endif
-
-#endif /* ENABLE_IPV4 */
-
 
 #define REV_NAT_F_TUPLE_SADDR 1
 #ifdef LB_DEBUG
@@ -850,7 +851,7 @@ __u32 lb4_affinity_backend_id(__u16 rev_nat_id,
 					.rev_nat_id = rev_nat_id };
 	struct lb4_affinity_val *val;
 	val = map_lookup_elem(&LB4_AFFINITY_MAP, &key);
-	struct lb4_affinity_match match = { .rev_nat_id = rev_nat_id };
+	struct lb_affinity_match match = { .rev_nat_id = rev_nat_id };
 
 	if (val != NULL) {
 		return val->backend_id;
@@ -860,7 +861,7 @@ __u32 lb4_affinity_backend_id(__u16 rev_nat_id,
 		}
 
 		match.backend_id = val->backend_id;
-		if (map_lookup_elem(&LB4_AFFINITY_MATCH_MAP, &match) == NULL) {
+		if (map_lookup_elem(&LB_AFFINITY_MATCH_MAP, &match) == NULL) {
 			map_delete_elem(&LB4_AFFINITY_MAP, &key);
 			return 0;
 		}
