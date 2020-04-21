@@ -19,20 +19,21 @@ package service
 import (
 	"net"
 
-	"github.com/cilium/cilium/pkg/node"
-	"github.com/cilium/cilium/pkg/service/healthserver"
-
 	"github.com/cilium/cilium/pkg/checker"
 	lb "github.com/cilium/cilium/pkg/loadbalancer"
 	"github.com/cilium/cilium/pkg/maps/lbmap"
+	"github.com/cilium/cilium/pkg/node"
+	"github.com/cilium/cilium/pkg/option"
+	"github.com/cilium/cilium/pkg/service/healthserver"
 
 	. "gopkg.in/check.v1"
 )
 
 type ManagerTestSuite struct {
-	svc       *Service
-	lbmap     *lbmap.LBMockMap // for accessing public fields
-	svcHealth *healthserver.MockHealthHTTPServerFactory
+	svc                       *Service
+	lbmap                     *lbmap.LBMockMap // for accessing public fields
+	svcHealth                 *healthserver.MockHealthHTTPServerFactory
+	prevOptionSessionAffinity bool
 }
 
 var _ = Suite(&ManagerTestSuite{})
@@ -47,11 +48,15 @@ func (m *ManagerTestSuite) SetUpTest(c *C) {
 
 	m.svcHealth = healthserver.NewMockHealthHTTPServerFactory()
 	m.svc.healthServer = healthserver.WithHealthHTTPServerFactory(m.svcHealth)
+
+	m.prevOptionSessionAffinity = option.Config.EnableSessionAffinity
+	option.Config.EnableSessionAffinity = true
 }
 
-func (e *ManagerTestSuite) TearDownTest(c *C) {
+func (m *ManagerTestSuite) TearDownTest(c *C) {
 	serviceIDAlloc.resetLocalID()
 	backendIDAlloc.resetLocalID()
+	option.Config.EnableSessionAffinity = m.prevOptionSessionAffinity
 }
 
 var (

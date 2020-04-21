@@ -27,6 +27,7 @@ import (
 	"github.com/cilium/cilium/pkg/metrics"
 	monitorAPI "github.com/cilium/cilium/pkg/monitor/api"
 	"github.com/cilium/cilium/pkg/node"
+	"github.com/cilium/cilium/pkg/option"
 	"github.com/cilium/cilium/pkg/service/healthserver"
 
 	"github.com/sirupsen/logrus"
@@ -466,6 +467,10 @@ func (s *Service) createSVCInfoIfNotExist(
 }
 
 func (s *Service) deleteBackendsFromAffinityMatchMap(svcID lb.ID, backendIDs []lb.BackendID) {
+	if !option.Config.EnableSessionAffinity {
+		return
+	}
+
 	for _, bID := range backendIDs {
 		if err := s.lbmap.DeleteAffinityMatch(uint16(svcID), uint16(bID)); err != nil {
 			log.WithFields(logrus.Fields{
@@ -477,6 +482,10 @@ func (s *Service) deleteBackendsFromAffinityMatchMap(svcID lb.ID, backendIDs []l
 }
 
 func (s *Service) addBackendsToAffinityMatchMap(svcID lb.ID, backendIDs []lb.BackendID) {
+	if !option.Config.EnableSessionAffinity {
+		return
+	}
+
 	for _, bID := range backendIDs {
 		if err := s.lbmap.AddAffinityMatch(uint16(svcID), uint16(bID)); err != nil {
 			log.WithFields(logrus.Fields{
