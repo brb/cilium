@@ -1,0 +1,10 @@
+name: CI
+on:
+  pull_request: {}
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: self-hosted
+    steps:
+      - name: Which host
+        run: uname -a
